@@ -1,0 +1,15 @@
+def pagar(diccionario, listaObjetos, espacios, botones, espacio, placa, archivoBaseDatos, carpetaVouchers, mainApp):
+    fechaEntrada = datetime.strptime(diccionario[placa][4], "%Y-%m-%d %H:%M:%S")
+    fechaSalida = datetime.now()
+    horas = (fechaSalida - fechaEntrada).total_seconds() / 3600
+    monto = round(horas*montoHora)
+    fechaSalidaStr = fechaSalida.strftime("%Y-%m-%d %H:%M:%S")
+    app = tk.Toplevel()
+    app.title("Tipo de pago")
+    app.geometry("300x200")
+    tk.Label(app, text="Elija su tipo de pago", font=("SansSerif", 14, "bold")).pack(pady=10)
+    entryTipoPago = tk.StringVar()
+    entryTipoPago.set(tiposPago[1])
+    tk.OptionMenu(app, entryTipoPago, *tiposPago.values()).pack(pady=5)
+    tk.Label(app, text=f"Monto a pagar: ₡{monto}", font=("SansSerif", 12)).pack(pady=5)
+    tk.Button(app, text="Confirmar pago", bg="#0d7703", fg="white", command=lambda: confirmarPago(diccionario, listaObjetos, espacios, botones, espacio, placa, entryTipoPago.get(), monto, fechaSalidaStr, archivoBaseDatos, carpetaVouchers, app, mainApp)).pack(pady=10)
