@@ -8,6 +8,7 @@ import pickle
 import urllib.request
 from fpdf import FPDF
 import qrcode
+import xml.etree.ElementTree as ET
 
 def crearPlaca():
     letras = ''.join(random.choices(string.ascii_uppercase, k=3))
@@ -133,7 +134,10 @@ def crearTextoQrVoucher(objeto):
     marca = objeto.info[1]
     tipo = objeto.info[3]
     fechaHoraEntrada = objeto.estadia[1]
-    textoQr = str(placa) + "-" + str(marca) + "-" + str(tipo) + "-" + str(fechaHoraEntrada)
+    textoQr = "Placa: " + str(placa)
+    textoQr += "\nMarca: " + str(marca)
+    textoQr += "\nTipo: " + str(tipo)
+    textoQr += "\nFecha y hora de entrada: " + str(fechaHoraEntrada)
     return textoQr
 
 def crearNombreVoucher(objeto):
@@ -144,7 +148,7 @@ def crearNombreVoucher(objeto):
         fechaTexto = fecha.strftime("%d-%m-%Y_%H-%M")
     except ValueError:
         fechaTexto = limpiarNombreArchivo(fechaHoraEntrada)
-    nombreArchivo = "voucher_#" + str(placa) + "_" + fechaTexto + ".pdf"
+    nombreArchivo = "voucher_" + str(placa) + "_" + fechaTexto + ".pdf"
     nombreArchivo = limpiarNombreArchivo(nombreArchivo)
     return nombreArchivo
 
@@ -199,6 +203,89 @@ def imprimirDiccionarioVehiculos(diccionarioVehiculos):
     print(json.dumps(diccionarioVehiculos, indent=4, ensure_ascii=False))
     print("---------------------")
 
+def crearFacturaPdf(objeto, carpetaVouchers):
+    crearCarpetaSiNoExiste(carpetaVouchers)
+    placa = objeto.info[0]
+    marca = objeto.info[1]
+    color = objeto.info[2]
+    tipo = objeto.info[3]
+    ubicacion = objeto.estadia[0]
+    fechaHoraEntrada = objeto.estadia[1]
+    fechaHoraSalida = objeto.estadia[2]
+    monto = objeto.pago[0]
+    tipoPago = objeto.pago[1]
+    try:
+        fecha = datetime.strptime(fechaHoraEntrada, "%Y-%m-%d %H:%M:%S")
+        fechaTexto = fecha.strftime("%d-%m-%Y_%H-%M")
+    except:
+        fechaTexto = limpiarNombreArchivo(fechaHoraEntrada)
+    nombreArchivo = "factura_" + str(placa) + "_" + fechaTexto + ".pdf"
+    nombreArchivo = limpiarNombreArchivo(nombreArchivo)
+    rutaPdf = os.path.join(carpetaVouchers, nombreArchivo)
+    textoQr = "Placa: " + str(placa)
+    textoQr += "\nMarca: " + str(marca)
+    textoQr += "\nTipo: " + str(tipo)
+    textoQr += "\nFecha y hora de entrada: " + str(fechaHoraEntrada)
+    imagenQr = qrcode.make(textoQr)
+    nombreQr = "qr_factura_" + limpiarNombreArchivo(str(placa)) + ".png"
+    rutaQr = os.path.join(carpetaVouchers, nombreQr)
+    imagenQr.save(rutaQr)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "Factura de Estacionamiento", ln=True, align="C")
+    pdf.ln(5)
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(0, 8, "Placa: " + str(placa), ln=True)
+    pdf.cell(0, 8, "Marca: " + str(marca), ln=True)
+    pdf.cell(0, 8, "Color: " + str(color), ln=True)
+    pdf.cell(0, 8, "Tipo: " + str(tipo), ln=True)
+    pdf.cell(0, 8, "Ubicacion: " + str(ubicacion), ln=True)
+    pdf.cell(0, 8, "Fecha y hora de entrada: " + str(fechaHoraEntrada), ln=True)
+    pdf.cell(0, 8, "Fecha y hora de salida: " + str(fechaHoraSalida), ln=True)
+    pdf.cell(0, 8, "Tipo de pago: " + str(tipoPago), ln=True)
+    pdf.cell(0, 8, "Monto: " + str(monto), ln=True)
+    pdf.ln(10)
+    pdf.cell(0, 8, "Codigo QR:", ln=True)
+    pdf.image(rutaQr, x=80, y=pdf.get_y(), w=50, h=50)
+    pdf.output(rutaPdf)
+    try:
+        os.remove(rutaQr)
+    except OSError:
+        pass
+    return rutaPdf
+
+def cierreTipoPago(listaObjetos, carpetaArchivos):
+    raiz = ET.Element("estacionamiento")
+    efectivo = ET.SubElement(raiz, "efectivo")
+    sinpe = ET.SubElement(raiz, "sinpe")
+    tarjeta = ET.SubElement(raiz, "tarjeta")
+    for objeto in listaObjetos:
+        tipoPago = objeto.pago[1]
+        if tipoPago == 1:
+            seccion = efectivo
+        elif tipoPago == 2:
+            seccion = sinpe
+        elif tipoPago == 3:
+            seccion = tarjeta
+        else:
+            continue
+        vehiculo = ET.SubElement(seccion, "vehiculo")
+        ET.SubElement(vehiculo, "placa").text = str(objeto.info[0])
+        ET.SubElement(vehiculo, "marca").text = str(objeto.info[1])
+        ET.SubElement(vehiculo, "color").text = str(objeto.info[2])
+        ET.SubElement(vehiculo, "tipo").text = str(objeto.info[3])
+        ET.SubElement(vehiculo, "ubicacion").text = str(objeto.estadia[0])
+        ET.SubElement(vehiculo, "fechaEntrada").text = str(objeto.estadia[1])
+        ET.SubElement(vehiculo, "fechaSalida").text = str(objeto.estadia[2])
+        ET.SubElement(vehiculo, "monto").text = str(objeto.pago[0])
+        ET.SubElement(vehiculo, "tipoPago").text = str(objeto.pago[1])
+    crearCarpetaSiNoExiste(carpetaArchivos)
+    arbol = ET.ElementTree(raiz)
+    rutaXML = os.path.join(carpetaArchivos, "cierreTipoPago.xml")
+    arbol.write(rutaXML, encoding="utf-8-sig", xml_declaration=True)
+    return rutaXML
+
 def cargarBaseDatos(archivoBaseDatos):
     if not os.path.exists(archivoBaseDatos):
         return []
@@ -223,8 +310,10 @@ def reconstruirDiccionarioDesdeObjetos(listaObjetos):
         fechaHoraSalida = objeto.estadia[2]
         monto = objeto.pago[0]
         tipoPago = objeto.pago[1]
+
         if fechaHoraSalida == "":
             diccionario[placa] = [marca, color, tipo, ubicacion, fechaHoraEntrada, fechaHoraSalida, monto, tipoPago]
+
     return diccionario
 
 def reconstruirEspaciosDesdeObjetos(listaObjetos, espacios):
@@ -232,6 +321,7 @@ def reconstruirEspaciosDesdeObjetos(listaObjetos, espacios):
         placa = objeto.info[0]
         ubicacion = objeto.estadia[0]
         fechaHoraSalida = objeto.estadia[2]
+
         if fechaHoraSalida == "":
             try:
                 indice = int(ubicacion) - 1
@@ -239,4 +329,5 @@ def reconstruirEspaciosDesdeObjetos(listaObjetos, espacios):
                     espacios[indice]["carro"] = placa
             except ValueError:
                 pass
+
     return espacios
