@@ -10,39 +10,7 @@ from funciones import convertirIdATexto
 from funciones import calcularMontoEstadia
 from funciones import crearFacturaPdf
 
-def cierreTipoPago(listaObjetos, carpetaArchivos, catalogoMarcas, catalogoColores, catalogoTipos, catalogoTiposPago):
-    raiz = ET.Element("estacionamiento")
-    efectivo = ET.SubElement(raiz, "efectivo")
-    sinpe = ET.SubElement(raiz, "sinpe")
-    tarjeta = ET.SubElement(raiz, "tarjeta")
-    for objeto in listaObjetos:
-        tipoPago = objeto.pago[1]
-        if tipoPago == 1:
-            seccion = efectivo
-        elif tipoPago == 2:
-            seccion = sinpe
-        elif tipoPago == 3:
-            seccion = tarjeta
-        else:
-            continue
-        vehiculo = ET.SubElement(seccion, "vehiculo")
-        ET.SubElement(vehiculo, "id").text = str(objeto.id)
-        ET.SubElement(vehiculo, "placa").text = str(objeto.info[0])
-        ET.SubElement(vehiculo, "marca").text = convertirIdATexto(catalogoMarcas, objeto.info[1], "Desconocida")
-        ET.SubElement(vehiculo, "color").text = convertirIdATexto(catalogoColores, objeto.info[2], "Desconocido")
-        ET.SubElement(vehiculo, "tipo").text = convertirIdATexto(catalogoTipos, objeto.info[3], "Desconocido")
-        ET.SubElement(vehiculo, "ubicacion").text = str(objeto.estadia[0])
-        ET.SubElement(vehiculo, "fechaEntrada").text = str(objeto.estadia[1])
-        ET.SubElement(vehiculo, "fechaSalida").text = str(objeto.estadia[2])
-        ET.SubElement(vehiculo, "monto").text = str(objeto.pago[0])
-        ET.SubElement(vehiculo, "tipoPago").text = convertirIdATexto(catalogoTiposPago, objeto.pago[1], "Desconocido")
-    crearCarpetaSiNoExiste(carpetaArchivos)
-    arbol = ET.ElementTree(raiz)
-    rutaXML = os.path.join(carpetaArchivos, "cierreTipoPago.xml")
-    arbol.write(rutaXML, encoding="utf-8-sig", xml_declaration=True)
-    return rutaXML
-
-def facturarPendientesCierreDiario(listaObjetos, diccionario, espacios, montoHora, tiempoDeGracia, carpetaVouchers, catalogoMarcas, catalogoColores, catalogoTipos, catalogoTiposPago):
+def facturarPendientesCierreDiario(listaObjetos, diccionario, espacios, montoHora, tiempoDeGracia, carpetaVouchers, catalogoMarcas, catalogoColores, catalogoTipos, catalogoTiposPago, tipoPagoPorPlaca):
     fechaHoraSalida = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     tiposPagoDisponibles = list(catalogoTiposPago.keys())
     indiceTipoPago = 0
@@ -50,8 +18,11 @@ def facturarPendientesCierreDiario(listaObjetos, diccionario, espacios, montoHor
     for objeto in listaObjetos:
         if objeto.estadia[2] == "":
             placa = objeto.info[0]
-            tipoPago = tiposPagoDisponibles[indiceTipoPago % len(tiposPagoDisponibles)]
-            indiceTipoPago += 1
+            if tipoPagoPorPlaca is not None and placa in tipoPagoPorPlaca:
+                tipoPago = tipoPagoPorPlaca[placa]
+            else:
+                tipoPago = tiposPagoDisponibles[indiceTipoPago % len(tiposPagoDisponibles)]
+                indiceTipoPago += 1
             monto = calcularMontoEstadia(objeto.estadia[1], fechaHoraSalida, montoHora, tiempoDeGracia)
             objeto.estadia[2] = fechaHoraSalida
             objeto.pago = (monto, tipoPago)
@@ -66,6 +37,18 @@ def facturarPendientesCierreDiario(listaObjetos, diccionario, espacios, montoHor
                 pass
             fila = [objeto.estadia[0], placa, objeto.estadia[1], objeto.estadia[2], tipoPago, monto]
             filasCierre.append(fila)
+    return filasCierre
+
+def obtenerFilasCierreDiario(listaObjetos, fechaCierre):
+    fechaCierreTexto = fechaCierre.strftime("%Y-%m-%d")
+    filasCierre = []
+    for objeto in listaObjetos:
+        fechaHoraSalida = str(objeto.estadia[2]).strip()
+        if fechaHoraSalida != "":
+            if len(fechaHoraSalida) >= 10:
+                if fechaHoraSalida[0:10] == fechaCierreTexto:
+                    fila = [objeto.estadia[0], objeto.info[0], objeto.estadia[1], objeto.estadia[2], objeto.pago[1], objeto.pago[0]]
+                    filasCierre.append(fila)
     return filasCierre
 
 def guardarUltimoCierreDiario(filasCierre, archivoCierreDiario):
@@ -159,3 +142,35 @@ def exportarCierreDiarioCsv(filasCierre, carpetaReportes, catalogoTiposPago):
             tipoPagoTexto = convertirIdATexto(catalogoTiposPago, tipoPago, "Desconocido")
             escritor.writerow([ubicacion, placa, horaEntrada, horaSalida, tipoPagoTexto, monto])
     return rutaCsv
+
+def cierreTipoPago(listaObjetos, carpetaArchivos, catalogoMarcas, catalogoColores, catalogoTipos, catalogoTiposPago):
+    raiz = ET.Element("estacionamiento")
+    efectivo = ET.SubElement(raiz, "efectivo")
+    sinpe = ET.SubElement(raiz, "sinpe")
+    tarjeta = ET.SubElement(raiz, "tarjeta")
+    for objeto in listaObjetos:
+        tipoPago = objeto.pago[1]
+        if tipoPago == 1:
+            seccion = efectivo
+        elif tipoPago == 2:
+            seccion = sinpe
+        elif tipoPago == 3:
+            seccion = tarjeta
+        else:
+            continue
+        vehiculo = ET.SubElement(seccion, "vehiculo")
+        ET.SubElement(vehiculo, "id").text = str(objeto.id)
+        ET.SubElement(vehiculo, "placa").text = str(objeto.info[0])
+        ET.SubElement(vehiculo, "marca").text = convertirIdATexto(catalogoMarcas, objeto.info[1], "Desconocida")
+        ET.SubElement(vehiculo, "color").text = convertirIdATexto(catalogoColores, objeto.info[2], "Desconocido")
+        ET.SubElement(vehiculo, "tipo").text = convertirIdATexto(catalogoTipos, objeto.info[3], "Desconocido")
+        ET.SubElement(vehiculo, "ubicacion").text = str(objeto.estadia[0])
+        ET.SubElement(vehiculo, "fechaEntrada").text = str(objeto.estadia[1])
+        ET.SubElement(vehiculo, "fechaSalida").text = str(objeto.estadia[2])
+        ET.SubElement(vehiculo, "monto").text = str(objeto.pago[0])
+        ET.SubElement(vehiculo, "tipoPago").text = convertirIdATexto(catalogoTiposPago, objeto.pago[1], "Desconocido")
+    crearCarpetaSiNoExiste(carpetaArchivos)
+    arbol = ET.ElementTree(raiz)
+    rutaXML = os.path.join(carpetaArchivos, "cierreTipoPago.xml")
+    arbol.write(rutaXML, encoding="utf-8-sig", xml_declaration=True)
+    return rutaXML
